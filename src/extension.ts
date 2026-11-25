@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const diagnosticCollection = vscode.languages.createDiagnosticCollection('bigo-complexity');
 
   const statusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
+    vscode.StatusBarAlignment.Left,
     100
   );
   statusBarItem.name = 'Big-O Complexity Analyzer';
@@ -220,16 +220,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const worst = findWorstBottleneck(activeFns);
     if (!worst || !worst.bottleneckLocation) {
-      statusBarItem.text = '$(clock) Big-O: O(1)';
+      statusBarItem.text = '$(graph) Big-O: O(1)';
       statusBarItem.tooltip = 'All active functions run in O(1) — Click to open Big-O Dashboard';
+      statusBarItem.backgroundColor = undefined;
       statusBarItem.command = OPEN_DASHBOARD_COMMAND;
       statusBarItem.show();
       return;
     }
 
-    const icon = worst.isHotspot ? '$(flame)' : '$(clock)';
+    const icon = worst.isHotspot ? '$(flame)' : '$(graph)';
     statusBarItem.text = `${icon} Big-O: ${worst.timeComplexity} (${worst.name})`;
     statusBarItem.tooltip = `${worst.name}: ${worst.timeComplexity} time, ${worst.spaceComplexity} space — Click to open Big-O Dashboard`;
+    statusBarItem.backgroundColor = worst.isHotspot
+      ? new vscode.ThemeColor('statusBarItem.warningBackground')
+      : undefined;
     statusBarItem.command = OPEN_DASHBOARD_COMMAND;
     statusBarItem.show();
   };

@@ -2,6 +2,13 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.1.2] - 2026-11-25
+
+### Improved
+- **Prominent Bottom-Left Status Bar Pill:** Moved the `Big-O` status bar button to the bottom-left with a warning highlight for hotspots so it never clips in narrow side-by-side layouts.
+- **Reliable Editor Title Button (`editorLangId`):** Switched the `editor/title` menu condition to `editorLangId` (`navigation@1`) for broader VS Code / Antigravity IDE compatibility.
+- **Hover Dashboard Links:** Added direct clickable **Open Complexity Dashboard** and **Scan Workspace** links at the bottom of every hover tooltip.
+
 ## [1.1.1] - 2026-11-25
 
 ### Added

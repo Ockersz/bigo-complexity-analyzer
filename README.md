@@ -12,7 +12,7 @@ Powered by the official TypeScript compiler AST (`ts.createSourceFile`), **Big-O
 
 | Feature | How to Access |
 | :--- | :--- |
-| **Interactive Big-O Dashboard** | Click the **`📊` graph icon** in the top-right editor toolbar, click **`🔥 Big-O: ...`** in the bottom-right status bar, or run `Big-O: Open Complexity Dashboard` |
+| **Interactive Big-O Dashboard** | Click the **`🔥 Big-O: ...`** pill in the **bottom-left** status bar, click **`📊`** in the editor toolbar, click the link inside any **Hover tooltip**, or run `Big-O: Open Complexity Dashboard` |
 | **Workspace Hotspot Scan** | Click **`Scan Workspace Hotspots`** inside the Dashboard or run `Big-O: Scan Workspace Hotspots` |
 | **Inline CodeLens** | Shown directly above every function, method, and arrow function — click to jump to the bottleneck line |
 | **Hover Breakdown & Tips** | Hover over any function header for Total vs. Self complexity, reasons, and refactoring tips |
@@ -51,7 +51,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.1.1.vsix
+code --install-extension bigo-complexity-analyzer-1.1.2.vsix
 ```
 
 ---

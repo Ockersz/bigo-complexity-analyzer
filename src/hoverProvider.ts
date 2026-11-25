@@ -5,7 +5,9 @@ import { getHotspotThresholdScore } from './codeLensProvider';
 
 function formatHoverMarkdown(fn: FunctionComplexity): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
-  md.isTrusted = false;
+  md.isTrusted = {
+    enabledCommands: ['bigoAnalyzer.openDashboard', 'bigoAnalyzer.scanWorkspace'],
+  };
 
   if (fn.ignored) {
     md.appendMarkdown(`### 🔇 Suppressed: \`${fn.name}\`\n\n`);
@@ -41,6 +43,10 @@ function formatHoverMarkdown(fn: FunctionComplexity): vscode.MarkdownString {
   if (fn.optimizationTip) {
     md.appendMarkdown(`\n> **Optimization Tip:** ${fn.optimizationTip}\n`);
   }
+
+  md.appendMarkdown(
+    `\n---\n[📊 Open Complexity Dashboard](command:bigoAnalyzer.openDashboard) · [🔍 Scan Workspace](command:bigoAnalyzer.scanWorkspace)\n`
+  );
 
   return md;
 }

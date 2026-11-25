@@ -2,7 +2,7 @@
   "name": "bigo-complexity-analyzer",
   "displayName": "Big-O Complexity Analyzer",
   "description": "Inline time and space complexity (Big-O) analysis for JavaScript and TypeScript files using the TypeScript AST.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "Ockersz",
   "license": "MIT",
   "repository": {
@@ -74,8 +74,8 @@
       "editor/title": [
         {
           "command": "bigoAnalyzer.openDashboard",
-          "group": "navigation",
-          "when": "resourceLangId == typescript || resourceLangId == typescriptreact || resourceLangId == javascript || resourceLangId == javascriptreact"
+          "group": "navigation@1",
+          "when": "editorLangId == typescript || editorLangId == typescriptreact || editorLangId == javascript || editorLangId == javascriptreact"
         }
       ]
     },
