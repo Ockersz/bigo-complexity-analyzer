@@ -10,3 +10,4 @@ esbuild.js
 **/*.map
 dist-test/**
 *.vsix
+linkedin-post-card.png
