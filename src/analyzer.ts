@@ -9,7 +9,7 @@ export interface BottleneckLocation {
 }
 
 export interface TimeTerm {
-  kind: 'poly' | 'sort' | 'exp';
+  kind: 'poly' | 'sqrt' | 'sort' | 'exp';
   polyDegree: number;
   logPower: number;
   score: number;
@@ -52,6 +52,18 @@ type FunctionNode =
   | ts.ArrowFunction
   | ts.FunctionExpression;
 
+type CandidateCategory =
+  | 'recursion-exp'
+  | 'recursion-linear'
+  | 'divide-conquer'
+  | 'sort'
+  | 'array-lookup'
+  | 'reduce-spread'
+  | 'queue-mutation'
+  | 'heavy-loop-op'
+  | 'regex-in-loop'
+  | 'loop';
+
 interface CandidateComplexity {
   term: TimeTerm;
   complexity: string;
@@ -59,7 +71,7 @@ interface CandidateComplexity {
   depth: number;
   reason: string;
   location: BottleneckLocation;
-  category: 'recursion-exp' | 'recursion-linear' | 'sort' | 'array-lookup' | 'loop';
+  category: CandidateCategory;
 }
 
 interface CallSite {
@@ -137,6 +149,8 @@ const CALLBACK_ITERATION_METHODS = new Set([
 ]);
 
 const LINEAR_LOOKUP_METHODS = new Set(['includes', 'indexOf', 'lastIndexOf']);
+
+const LINEAR_ARRAY_MUTATION_METHODS = new Set(['shift', 'unshift', 'splice']);
 
 const ARRAY_ALLOCATING_METHODS = new Set([
   'map',
@@ -233,6 +247,13 @@ function scoreForPolyLog(polyDegree: number, logPower: number): number {
   return 60 + (polyDegree - 3) * 20 + logBonus;
 }
 
+function scoreForSqrt(polyDegree: number, logPower: number): number {
+  if (polyDegree <= 0) {
+    return logPower > 0 ? 9 : 7;
+  }
+  return scoreForPolyLog(polyDegree, logPower) + 3;
+}
+
 function scoreForSort(loopDepth: number): number {
   if (loopDepth <= 0) {
     return 15;
@@ -249,6 +270,17 @@ export function formatTimeTerm(term: TimeTerm): string {
   }
   if (term.kind === 'sort') {
     return formatSortBigO(term.polyDegree);
+  }
+  if (term.kind === 'sqrt') {
+    const parts: string[] = [];
+    if (term.polyDegree >= 1) {
+      parts.push(formatPower('n', term.polyDegree));
+    }
+    parts.push('√n');
+    if (term.logPower >= 1) {
+      parts.push(formatLogPower(term.logPower));
+    }
+    return `O(${parts.join(' ')})`;
   }
   if (term.polyDegree <= 0 && term.logPower <= 0) {
     return 'O(1)';
@@ -278,6 +310,14 @@ function composeTimeTerm(
       polyDegree: combinedPoly,
       logPower: combinedLog,
       score: scoreForSort(combinedPoly),
+    };
+  }
+  if (calleeTerm.kind === 'sqrt') {
+    return {
+      kind: 'sqrt',
+      polyDegree: combinedPoly,
+      logPower: combinedLog,
+      score: scoreForSqrt(combinedPoly, combinedLog),
     };
   }
   return {
@@ -637,6 +677,54 @@ function isConstantBoundedForLoop(node: ts.ForStatement): boolean {
   return Math.abs(boundVal - initVal) <= CONSTANT_LOOP_BOUND_LIMIT;
 }
 
+function isSqrtConditionExpr(expr: ts.Expression | undefined): boolean {
+  if (!expr) {
+    return false;
+  }
+  let found = false;
+  function scan(n: ts.Node): void {
+    if (found) {
+      return;
+    }
+    if (ts.isBinaryExpression(n)) {
+      const op = n.operatorToken.kind;
+      const isCompare =
+        op === ts.SyntaxKind.LessThanToken ||
+        op === ts.SyntaxKind.LessThanEqualsToken ||
+        op === ts.SyntaxKind.GreaterThanToken ||
+        op === ts.SyntaxKind.GreaterThanEqualsToken;
+      if (isCompare) {
+        const isSquare = (side: ts.Expression): boolean =>
+          ts.isBinaryExpression(side) &&
+          side.operatorToken.kind === ts.SyntaxKind.AsteriskToken &&
+          ts.isIdentifier(side.left) &&
+          ts.isIdentifier(side.right) &&
+          side.left.text === side.right.text;
+
+        const isMathSqrt = (side: ts.Expression): boolean =>
+          ts.isCallExpression(side) &&
+          ts.isPropertyAccessExpression(side.expression) &&
+          ts.isIdentifier(side.expression.expression) &&
+          side.expression.expression.text === 'Math' &&
+          side.expression.name.text === 'sqrt';
+
+        if (
+          isSquare(n.left) ||
+          isSquare(n.right) ||
+          isMathSqrt(n.left) ||
+          isMathSqrt(n.right)
+        ) {
+          found = true;
+          return;
+        }
+      }
+    }
+    ts.forEachChild(n, scan);
+  }
+  scan(expr);
+  return found;
+}
+
 function containsLogarithmicOperator(node: ts.Node): boolean {
   let found = false;
   function scan(n: ts.Node): void {
@@ -860,6 +948,36 @@ function hasMemoizationPattern(body: ts.Node): boolean {
   return hasCacheReadReturn && hasCacheWrite;
 }
 
+function hasDivideAndConquerSplit(body: ts.Node): boolean {
+  let hasSlice = false;
+  let hasMidpoint = false;
+
+  function scan(n: ts.Node): void {
+    if (hasSlice || hasMidpoint) {
+      return;
+    }
+    if (isFunctionNode(n) && !isInlineArrayMethodCallback(n)) {
+      return;
+    }
+    if (
+      ts.isCallExpression(n) &&
+      ts.isPropertyAccessExpression(n.expression) &&
+      n.expression.name.text === 'slice'
+    ) {
+      hasSlice = true;
+      return;
+    }
+    if (ts.isExpression(n) && isBinaryMidpointExpression(n)) {
+      hasMidpoint = true;
+      return;
+    }
+    ts.forEachChild(n, scan);
+  }
+
+  scan(body);
+  return hasSlice || hasMidpoint;
+}
+
 function getLoopLabel(node: ts.Node): string | null {
   if (ts.isForStatement(node)) {
     return 'for loop';
@@ -900,7 +1018,15 @@ function buildOptimizationTip(
   best: CandidateComplexity | null,
   isHotspot: boolean
 ): string | null {
-  if (!isHotspot || !best) {
+  if (!best) {
+    return null;
+  }
+
+  if (best.category === 'regex-in-loop') {
+    return 'Hoist new RegExp(...) outside the loop so the regex pattern is compiled once instead of on every iteration.';
+  }
+
+  if (!isHotspot) {
     return null;
   }
 
@@ -909,6 +1035,12 @@ function buildOptimizationTip(
       return 'Use memoization (a cache/Map) or bottom-up dynamic programming to collapse overlapping subproblems from O(2^n) to O(n).';
     case 'array-lookup':
       return 'Pre-index lookups into a Set or Map outside the loop so repeated .includes() / .indexOf() / .find() calls drop from O(n) to O(1).';
+    case 'reduce-spread':
+      return 'Avoid spreading accumulators ({ ...acc } or [...acc]) inside loops or .reduce() — mutate the accumulator directly (acc[k] = v or acc.push(v)) to drop O(n²) to O(n).';
+    case 'queue-mutation':
+      return 'Avoid .shift() / .unshift() / .splice() inside loops — use a head-index pointer or deque to drop O(n²) to O(n).';
+    case 'heavy-loop-op':
+      return 'Hoist JSON.parse/stringify or Object.keys/values/entries/assign outside the loop to avoid repeated O(n) scans per iteration.';
     case 'sort':
       return 'Hoist .sort() outside the enclosing loop or sort once beforehand to avoid repeated O(m log m) sorting per iteration.';
     case 'loop':
@@ -1039,6 +1171,42 @@ function analyzeFunctionLocal(
     return ` inside ${outerStack[outerStack.length - 1]}`;
   }
 
+  function visitLoopChildren(
+    loopNode: ts.Node,
+    nextPolyDepth: number,
+    nextLogDepth: number,
+    outerPolyDepth: number,
+    outerLogDepth: number,
+    outerStack: string[],
+    nextStack: string[]
+  ): void {
+    if (ts.isForStatement(loopNode)) {
+      if (loopNode.initializer) {
+        visit(loopNode.initializer, outerPolyDepth, outerLogDepth, outerStack);
+      }
+      if (loopNode.condition) {
+        visit(loopNode.condition, nextPolyDepth, nextLogDepth, nextStack);
+      }
+      if (loopNode.incrementor) {
+        visit(loopNode.incrementor, nextPolyDepth, nextLogDepth, nextStack);
+      }
+      visit(loopNode.statement, nextPolyDepth, nextLogDepth, nextStack);
+      return;
+    }
+
+    if (ts.isForOfStatement(loopNode) || ts.isForInStatement(loopNode)) {
+      visit(loopNode.initializer, outerPolyDepth, outerLogDepth, outerStack);
+      visit(loopNode.expression, outerPolyDepth, outerLogDepth, outerStack);
+      visit(loopNode.statement, nextPolyDepth, nextLogDepth, nextStack);
+      return;
+    }
+
+    if (ts.isWhileStatement(loopNode) || ts.isDoStatement(loopNode)) {
+      visit(loopNode.expression, nextPolyDepth, nextLogDepth, nextStack);
+      visit(loopNode.statement, nextPolyDepth, nextLogDepth, nextStack);
+    }
+  }
+
   function visit(
     node: ts.Node,
     polyDepth: number,
@@ -1056,7 +1224,40 @@ function analyzeFunctionLocal(
       if (ts.isForStatement(node) && isConstantBoundedForLoop(node)) {
         const context = formatContext(outerStack);
         addReason(`Constant-bounded for loop${context} at line ${line} (O(1))`);
-        ts.forEachChild(node, (child) => visit(child, polyDepth, logDepth, outerStack));
+        visitLoopChildren(node, polyDepth, logDepth, polyDepth, logDepth, outerStack, outerStack);
+        return;
+      }
+
+      const condExpr = ts.isForStatement(node)
+        ? node.condition
+        : ts.isWhileStatement(node) || ts.isDoStatement(node)
+          ? node.expression
+          : undefined;
+
+      if (isSqrtConditionExpr(condExpr)) {
+        const term: TimeTerm = {
+          kind: 'sqrt',
+          polyDegree: polyDepth,
+          logPower: logDepth,
+          score: scoreForSqrt(polyDepth, logDepth),
+        };
+        const context = formatContext(outerStack);
+        const description = context
+          ? `Square-root bounded ${loopLabel}${context} at line ${line} (${formatTimeTerm(term)})`
+          : `Square-root bounded ${loopLabel} at line ${line} (${formatTimeTerm(term)})`;
+        addReason(description);
+        localCandidates.push({
+          term,
+          complexity: formatTimeTerm(term),
+          score: term.score,
+          depth: polyDepth + logDepth + 1,
+          reason: description,
+          location: makeLocation(node, sourceFile, description),
+          category: 'loop',
+        });
+
+        const nextStack = [...outerStack, `square-root ${loopLabel}`];
+        visitLoopChildren(node, polyDepth, logDepth, polyDepth, logDepth, outerStack, nextStack);
         return;
       }
 
@@ -1092,7 +1293,7 @@ function analyzeFunctionLocal(
         });
 
         const nextStack = [...outerStack, `logarithmic ${loopLabel}`];
-        ts.forEachChild(node, (child) => visit(child, polyDepth, nextLogDepth, nextStack));
+        visitLoopChildren(node, polyDepth, nextLogDepth, polyDepth, logDepth, outerStack, nextStack);
         return;
       }
 
@@ -1123,8 +1324,34 @@ function analyzeFunctionLocal(
       });
 
       const nextStack = [...outerStack, loopLabel];
-      ts.forEachChild(node, (child) => visit(child, nextPolyDepth, logDepth, nextStack));
+      visitLoopChildren(node, nextPolyDepth, logDepth, polyDepth, logDepth, outerStack, nextStack);
       return;
+    }
+
+    // Hidden O(n) anti-pattern: object or array spread inside a loop or .reduce()
+    if ((ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) && polyDepth >= 1) {
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      const context = formatContext(outerStack);
+      const effectiveDepth = polyDepth + 1;
+      const term: TimeTerm = {
+        kind: 'poly',
+        polyDegree: effectiveDepth,
+        logPower: logDepth,
+        score: scoreForPolyLog(effectiveDepth, logDepth),
+      };
+      const kindLabel = ts.isSpreadAssignment(node) ? 'Object spread {...}' : 'Array spread [...]';
+      const description = `${kindLabel}${context} copies all keys/elements per iteration at line ${line} (${formatTimeTerm(term)})`;
+      addReason(description);
+      localCandidates.push({
+        term,
+        complexity: formatTimeTerm(term),
+        score: term.score,
+        depth: effectiveDepth + logDepth,
+        reason: description,
+        location: makeLocation(node, sourceFile, description),
+        category: 'reduce-spread',
+      });
+      recordSpace(effectiveDepth, `${kindLabel} allocation${context} at line ${line}`);
     }
 
     if (ts.isCallExpression(node)) {
@@ -1311,6 +1538,26 @@ function analyzeFunctionLocal(
             location: makeLocation(node, sourceFile, description),
             category: polyDepth >= 1 ? 'array-lookup' : 'loop',
           });
+        } else if (LINEAR_ARRAY_MUTATION_METHODS.has(methodName) && polyDepth >= 1) {
+          const effectiveDepth = polyDepth + 1;
+          const context = formatContext(outerStack);
+          const term: TimeTerm = {
+            kind: 'poly',
+            polyDegree: effectiveDepth,
+            logPower: logDepth,
+            score: scoreForPolyLog(effectiveDepth, logDepth),
+          };
+          const description = `Linear .${methodName}() array re-indexing${context} at line ${line} (${formatTimeTerm(term)})`;
+          addReason(description);
+          localCandidates.push({
+            term,
+            complexity: formatTimeTerm(term),
+            score: term.score,
+            depth: effectiveDepth + logDepth,
+            reason: description,
+            location: makeLocation(node, sourceFile, description),
+            category: 'queue-mutation',
+          });
         } else if (ARRAY_ALLOCATING_METHODS.has(methodName)) {
           const allocDepth = polyDepth + 1;
           const context = formatContext(outerStack);
@@ -1330,17 +1577,49 @@ function analyzeFunctionLocal(
 
         if (ts.isIdentifier(node.expression.expression)) {
           const targetObj = node.expression.expression.text;
-          if (
-            (targetObj === 'Array' && methodName === 'from') ||
-            (targetObj === 'Object' &&
-              (methodName === 'keys' ||
-                methodName === 'values' ||
-                methodName === 'entries'))
-          ) {
+          const isObjectReflection =
+            targetObj === 'Object' &&
+            (methodName === 'keys' ||
+              methodName === 'values' ||
+              methodName === 'entries' ||
+              methodName === 'assign');
+          const isJsonSerde =
+            targetObj === 'JSON' &&
+            (methodName === 'parse' || methodName === 'stringify');
+
+          if (isObjectReflection || isJsonSerde) {
+            const context = formatContext(outerStack);
+            if (polyDepth >= 1) {
+              const effectiveDepth = polyDepth + 1;
+              const term: TimeTerm = {
+                kind: 'poly',
+                polyDegree: effectiveDepth,
+                logPower: logDepth,
+                score: scoreForPolyLog(effectiveDepth, logDepth),
+              };
+              const description = `${targetObj}.${methodName}() linear pass${context} at line ${line} (${formatTimeTerm(term)})`;
+              addReason(description);
+              localCandidates.push({
+                term,
+                complexity: formatTimeTerm(term),
+                score: term.score,
+                depth: effectiveDepth + logDepth,
+                reason: description,
+                location: makeLocation(node, sourceFile, description),
+                category: 'heavy-loop-op',
+              });
+            }
+            if (isObjectReflection && methodName !== 'assign') {
+              recordSpace(
+                polyDepth + 1,
+                `${targetObj}.${methodName}() allocation${context} at line ${line}`
+              );
+            }
+          } else if (targetObj === 'Array' && methodName === 'from') {
             const context = formatContext(outerStack);
             recordSpace(
               polyDepth + 1,
-              `${targetObj}.${methodName}() allocation${context} at line ${line}`
+              `Array.from() allocation${context} at line ${line}`
             );
           }
         }
@@ -1349,27 +1628,43 @@ function analyzeFunctionLocal(
 
     if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
       const ctorName = node.expression.text;
+      const line =
+        sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      const context = formatContext(outerStack);
+
       if (ALLOCATING_CONSTRUCTORS.has(ctorName)) {
-        const line =
-          sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-        const context = formatContext(outerStack);
         recordSpace(
           polyDepth + 1,
           `new ${ctorName}() allocation${context} at line ${line}`
         );
+      } else if (ctorName === 'RegExp' && polyDepth >= 1) {
+        const description = `new RegExp() compiled${context} at line ${line}`;
+        addReason(description);
+        const term: TimeTerm = {
+          kind: 'poly',
+          polyDegree: polyDepth,
+          logPower: logDepth,
+          score: scoreForPolyLog(polyDepth, logDepth) + 1,
+        };
+        localCandidates.push({
+          term,
+          complexity: formatTimeTerm(term),
+          score: term.score,
+          depth: polyDepth + logDepth,
+          reason: description,
+          location: makeLocation(node, sourceFile, description),
+          category: 'regex-in-loop',
+        });
       }
     }
 
-    if (ts.isArrayLiteralExpression(node)) {
+    // Spread copy at depth 0 (e.g. [...nums].sort(...)) still counts as O(n) space
+    if (ts.isArrayLiteralExpression(node) && polyDepth === 0) {
       const hasSpread = node.elements.some((el) => ts.isSpreadElement(el));
       if (hasSpread) {
         const line =
           sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-        const context = formatContext(outerStack);
-        recordSpace(
-          polyDepth + 1,
-          `Array spread copy [... ]${context} at line ${line}`
-        );
+        recordSpace(1, `Array spread copy [... ] at line ${line}`);
       }
     }
 
@@ -1382,8 +1677,44 @@ function analyzeFunctionLocal(
 
   const isMemoized =
     recursiveCallCount >= 1 && fnNode.body ? hasMemoizationPattern(fnNode.body) : false;
+  const isDivideConquer =
+    recursiveCallCount >= 2 &&
+    !isMemoized &&
+    !recursiveInLoop &&
+    fnNode.body !== undefined &&
+    hasDivideAndConquerSplit(fnNode.body);
 
-  if (
+  if (isDivideConquer) {
+    const loc =
+      firstRecursiveLoc ??
+      makeLocation(
+        fnNode,
+        sourceFile,
+        `Divide-and-conquer recursion in ${identity.displayName}()`
+      );
+    const effectivePoly = Math.max(1, maxPolyDepth);
+    const term: TimeTerm = {
+      kind: 'poly',
+      polyDegree: effectivePoly,
+      logPower: 1,
+      score: scoreForPolyLog(effectivePoly, 1),
+    };
+    const reason = `Divide-and-conquer recursion in ${identity.displayName}() at line ${loc.line} (${formatTimeTerm(term)})`;
+    addReason(reason);
+    localCandidates.push({
+      term,
+      complexity: formatTimeTerm(term),
+      score: term.score,
+      depth: effectivePoly + 1,
+      reason,
+      location: { ...loc, description: reason },
+      category: 'divide-conquer',
+    });
+    recordSpace(
+      Math.max(1, maxPolyDepth),
+      `Divide-and-conquer recursion stack in ${identity.displayName}() at line ${loc.line}`
+    );
+  } else if (
     (recursiveCallCount >= 2 || (recursiveCallCount >= 1 && recursiveInLoop)) &&
     !isMemoized
   ) {

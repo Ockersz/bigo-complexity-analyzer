@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { FunctionComplexity } from './analyzer';
 import { AnalysisCache } from './cache';
+import { BigOCodeActionProvider, OPEN_DASHBOARD_COMMAND } from './codeActionProvider';
 import {
   BigOCodeLensProvider,
   getHotspotThresholdScore,
   REVEAL_BOTTLENECK_COMMAND,
 } from './codeLensProvider';
+import { BigODashboardPanel, WorkspaceFunctionEntry } from './dashboardPanel';
 import { BigOHoverProvider } from './hoverProvider';
 
 const SUPPORTED_LANGUAGES = [
@@ -18,6 +20,8 @@ const SUPPORTED_LANGUAGES = [
 const DOCUMENT_SELECTOR: vscode.DocumentSelector = SUPPORTED_LANGUAGES.map((language) => ({
   language,
 }));
+
+const SCAN_WORKSPACE_COMMAND = 'bigoAnalyzer.scanWorkspace';
 
 function isSupportedDocument(document: vscode.TextDocument): boolean {
   return SUPPORTED_LANGUAGES.includes(document.languageId);
@@ -54,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const cache = new AnalysisCache();
   const codeLensProvider = new BigOCodeLensProvider(cache);
   const hoverProvider = new BigOHoverProvider(cache);
+  const codeActionProvider = new BigOCodeActionProvider(cache);
   const diagnosticCollection = vscode.languages.createDiagnosticCollection('bigo-complexity');
 
   const statusBarItem = vscode.window.createStatusBarItem(
@@ -74,6 +79,84 @@ export function activate(context: vscode.ExtensionContext): void {
       fontStyle: 'italic',
     },
   });
+
+  const jumpToOffset = async (
+    uri: vscode.Uri,
+    startOffset: number,
+    endOffset: number
+  ): Promise<void> => {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
+    const startPos = document.positionAt(startOffset);
+    const endPos = document.positionAt(endOffset);
+    const selectionRange = new vscode.Range(startPos, endPos);
+
+    editor.selection = new vscode.Selection(startPos, endPos);
+    editor.revealRange(selectionRange, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  };
+
+  const scanWorkspaceHotspots = async (): Promise<void> => {
+    const config = vscode.workspace.getConfiguration('bigoAnalyzer');
+    const threshold = getHotspotThresholdScore(config);
+    const entries: WorkspaceFunctionEntry[] = [];
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Scanning workspace for Big-O hotspots...',
+        cancellable: true,
+      },
+      async (progress, token) => {
+        const files = await vscode.workspace.findFiles(
+          '**/*.{ts,tsx,js,jsx}',
+          '**/{node_modules,dist,dist-test,out,build,.git}/**',
+          500,
+          token
+        );
+
+        for (let i = 0; i < files.length; i++) {
+          if (token.isCancellationRequested) {
+            break;
+          }
+          const uri = files[i];
+          progress.report({
+            increment: 100 / Math.max(1, files.length),
+            message: vscode.workspace.asRelativePath(uri),
+          });
+          try {
+            const doc = await vscode.workspace.openTextDocument(uri);
+            if (!isSupportedDocument(doc)) {
+              continue;
+            }
+            const functions = cache.getOrAnalyze(doc, threshold);
+            const rel = vscode.workspace.asRelativePath(uri);
+            for (const fn of functions) {
+              if (!fn.ignored && fn.isHotspot) {
+                entries.push({
+                  uriString: uri.toString(),
+                  relativePath: rel,
+                  fn,
+                });
+              }
+            }
+          } catch {
+            // Skip unreadable or binary-like files
+          }
+        }
+      }
+    );
+
+    const panel = BigODashboardPanel.createOrShow(
+      (uriStr, start, end) => void jumpToOffset(vscode.Uri.parse(uriStr), start, end),
+      scanWorkspaceHotspots
+    );
+    const editor = vscode.window.activeTextEditor;
+    if (editor && isSupportedDocument(editor.document)) {
+      const fns = cache.getOrAnalyze(editor.document, threshold);
+      panel.updateCurrentFile(editor.document.fileName, editor.document.uri.toString(), fns);
+    }
+    panel.updateWorkspaceHotspots(entries);
+  };
 
   const updateDiagnosticsForDocument = (
     document: vscode.TextDocument,
@@ -138,24 +221,16 @@ export function activate(context: vscode.ExtensionContext): void {
     const worst = findWorstBottleneck(activeFns);
     if (!worst || !worst.bottleneckLocation) {
       statusBarItem.text = '$(clock) Big-O: O(1)';
-      statusBarItem.tooltip = 'All active functions in this file run in O(1) time';
-      statusBarItem.command = undefined;
+      statusBarItem.tooltip = 'All active functions run in O(1) — Click to open Big-O Dashboard';
+      statusBarItem.command = OPEN_DASHBOARD_COMMAND;
       statusBarItem.show();
       return;
     }
 
     const icon = worst.isHotspot ? '$(flame)' : '$(clock)';
     statusBarItem.text = `${icon} Big-O: ${worst.timeComplexity} (${worst.name})`;
-    statusBarItem.tooltip = `${worst.name}: ${worst.timeComplexity} time, ${worst.spaceComplexity} space — Click to jump to bottleneck`;
-    statusBarItem.command = {
-      title: 'Jump to Bottleneck',
-      command: REVEAL_BOTTLENECK_COMMAND,
-      arguments: [
-        document.uri,
-        worst.bottleneckLocation.startOffset,
-        worst.bottleneckLocation.endOffset,
-      ],
-    };
+    statusBarItem.tooltip = `${worst.name}: ${worst.timeComplexity} time, ${worst.spaceComplexity} space — Click to open Big-O Dashboard`;
+    statusBarItem.command = OPEN_DASHBOARD_COMMAND;
     statusBarItem.show();
   };
 
@@ -180,6 +255,15 @@ export function activate(context: vscode.ExtensionContext): void {
     const functions = cache.getOrAnalyze(editor.document, threshold);
     updateDiagnosticsForDocument(editor.document, functions, config);
     updateStatusBar(editor.document, functions, enabled);
+
+    const dashboard = BigODashboardPanel.getCurrent();
+    if (dashboard) {
+      dashboard.updateCurrentFile(
+        editor.document.fileName,
+        editor.document.uri.toString(),
+        functions
+      );
+    }
 
     if (!showDecorations) {
       editor.setDecorations(hotspotDecorationType, []);
@@ -226,15 +310,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!uri || typeof startOffset !== 'number' || typeof endOffset !== 'number') {
         return;
       }
-
-      const document = await vscode.workspace.openTextDocument(uri);
-      const editor = await vscode.window.showTextDocument(document);
-      const startPos = document.positionAt(startOffset);
-      const endPos = document.positionAt(endOffset);
-      const selectionRange = new vscode.Range(startPos, endPos);
-
-      editor.selection = new vscode.Selection(startPos, endPos);
-      editor.revealRange(selectionRange, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+      await jumpToOffset(uri, startOffset, endOffset);
     }
   );
 
@@ -251,6 +327,28 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const openDashboardCommand = vscode.commands.registerCommand(
+    OPEN_DASHBOARD_COMMAND,
+    () => {
+      const panel = BigODashboardPanel.createOrShow(
+        (uriStr, start, end) => void jumpToOffset(vscode.Uri.parse(uriStr), start, end),
+        scanWorkspaceHotspots
+      );
+      const editor = vscode.window.activeTextEditor;
+      if (editor && isSupportedDocument(editor.document)) {
+        const config = vscode.workspace.getConfiguration('bigoAnalyzer');
+        const threshold = getHotspotThresholdScore(config);
+        const fns = cache.getOrAnalyze(editor.document, threshold);
+        panel.updateCurrentFile(editor.document.fileName, editor.document.uri.toString(), fns);
+      }
+    }
+  );
+
+  const scanWorkspaceCommand = vscode.commands.registerCommand(
+    SCAN_WORKSPACE_COMMAND,
+    scanWorkspaceHotspots
+  );
+
   context.subscriptions.push(
     hotspotDecorationType,
     diagnosticCollection,
@@ -258,14 +356,20 @@ export function activate(context: vscode.ExtensionContext): void {
     codeLensProvider,
     revealBottleneckCommand,
     toggleEnabledCommand,
+    openDashboardCommand,
+    scanWorkspaceCommand,
     vscode.languages.registerCodeLensProvider(DOCUMENT_SELECTOR, codeLensProvider),
     vscode.languages.registerHoverProvider(DOCUMENT_SELECTOR, hoverProvider),
+    vscode.languages.registerCodeActionsProvider(
+      DOCUMENT_SELECTOR,
+      codeActionProvider,
+      { providedCodeActionKinds: BigOCodeActionProvider.providedCodeActionKinds }
+    ),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       updateEditorState(editor);
     }),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (isSupportedDocument(event.document)) {
-        // Clear cross-file cached results so helper edits propagate to callers
         cache.invalidateAll();
       }
       const activeEditor = vscode.window.activeTextEditor;

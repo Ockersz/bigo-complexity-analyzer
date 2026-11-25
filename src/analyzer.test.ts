@@ -201,6 +201,10 @@ test('sample/demo.ts yields expected complexity profile', () => {
   assert.equal(byName(results, 'searchSortedMatrix').timeComplexity, 'O(n log n)');
   assert.equal(byName(results, 'ignoredNestedExample').ignored, true);
   assert.equal(byName(results, 'ignoredNestedExample').isHotspot, false);
+  assert.equal(byName(results, 'reduceSpreadTrap').timeComplexity, 'O(n²)');
+  assert.equal(byName(results, 'queueShiftTrap').timeComplexity, 'O(n²)');
+  assert.equal(byName(results, 'isPrime').timeComplexity, 'O(√n)');
+  assert.equal(byName(results, 'mergeSort').timeComplexity, 'O(n log n)');
 });
 
 test('nested inner sub-function propagates combined complexity to caller', () => {
@@ -450,4 +454,115 @@ test('cross-file relative import resolution handles named, namespace, and circul
 
   const circRes = analyzeCode(files['/proj/circA.ts'], '/proj/circA.ts', { resolveImport });
   assert.equal(byName(circRes, 'a').timeComplexity, 'O(n)');
+});
+
+test('hidden O(n) anti-patterns inside loops and .reduce()', () => {
+  const results = analyzeCode(`
+    function spreadInReduce(items: { id: string; v: number }[]) {
+      return items.reduce((acc, item) => ({ ...acc, [item.id]: item.v }), {});
+    }
+
+    function spreadArrayInLoop(items: number[]) {
+      let out: number[] = [];
+      for (const x of items) {
+        out = [...out, x];
+      }
+      return out;
+    }
+
+    function shiftInLoop(queue: number[]) {
+      while (queue.length > 0) {
+        queue.shift();
+      }
+    }
+
+    function spliceInLoop(arr: number[]) {
+      for (let i = 0; i < arr.length; i++) {
+        arr.splice(i, 1);
+      }
+    }
+
+    function jsonAndKeysInLoop(objs: Record<string, number>[]) {
+      for (const obj of objs) {
+        void JSON.stringify(obj);
+      }
+    }
+
+    function regexInLoop(lines: string[]) {
+      for (const line of lines) {
+        const re = new RegExp('foo');
+        void re.test(line);
+      }
+    }
+
+    function loopOverObjectKeysOnce(obj: Record<string, number>) {
+      let sum = 0;
+      for (const k of Object.keys(obj)) {
+        sum += obj[k];
+      }
+      return sum;
+    }
+  `);
+
+  const spreadInReduce = byName(results, 'spreadInReduce');
+  assert.equal(spreadInReduce.timeComplexity, 'O(n²)');
+  assert.equal(spreadInReduce.spaceComplexity, 'O(n²)');
+  assert.equal(spreadInReduce.isHotspot, true);
+  assert.ok(spreadInReduce.optimizationTip?.includes('spreading accumulators'));
+
+  assert.equal(byName(results, 'spreadArrayInLoop').timeComplexity, 'O(n²)');
+
+  const shiftInLoop = byName(results, 'shiftInLoop');
+  assert.equal(shiftInLoop.timeComplexity, 'O(n²)');
+  assert.ok(shiftInLoop.optimizationTip?.includes('.shift()'));
+
+  assert.equal(byName(results, 'spliceInLoop').timeComplexity, 'O(n²)');
+
+  const jsonInLoop = byName(results, 'jsonAndKeysInLoop');
+  assert.equal(jsonInLoop.timeComplexity, 'O(n²)');
+  assert.ok(jsonInLoop.optimizationTip?.includes('JSON.parse/stringify'));
+
+  const regexInLoop = byName(results, 'regexInLoop');
+  assert.equal(regexInLoop.timeComplexity, 'O(n)');
+  assert.ok(regexInLoop.optimizationTip?.includes('new RegExp'));
+
+  // Object.keys(obj) in for-of header runs once before loop, so it must stay O(n)
+  assert.equal(byName(results, 'loopOverObjectKeysOnce').timeComplexity, 'O(n)');
+});
+
+test('square-root loops and divide-and-conquer recursion', () => {
+  const results = analyzeCode(`
+    function isPrime(n: number): boolean {
+      for (let i = 2; i * i <= n; i++) {
+        if (n % i === 0) return false;
+      }
+      return true;
+    }
+
+    function sqrtBound(n: number): number {
+      let count = 0;
+      for (let i = 1; i <= Math.sqrt(n); i++) {
+        count++;
+      }
+      return count;
+    }
+
+    function mergeSort(arr: number[]): number[] {
+      if (arr.length <= 1) return arr;
+      const mid = Math.floor(arr.length / 2);
+      const left = mergeSort(arr.slice(0, mid));
+      const right = mergeSort(arr.slice(mid));
+      return left.concat(right);
+    }
+  `);
+
+  assert.equal(byName(results, 'isPrime').timeComplexity, 'O(√n)');
+  assert.equal(byName(results, 'isPrime').isHotspot, false);
+  assert.equal(byName(results, 'sqrtBound').timeComplexity, 'O(√n)');
+
+  const ms = byName(results, 'mergeSort');
+  assert.equal(ms.timeComplexity, 'O(n log n)');
+  assert.equal(ms.spaceComplexity, 'O(n)');
+  assert.equal(ms.isHotspot, false);
+  assert.ok(ms.reasons.some((r) => r.includes('Divide-and-conquer')));
 });

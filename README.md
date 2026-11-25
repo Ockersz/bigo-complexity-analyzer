@@ -11,6 +11,8 @@ Powered by the official TypeScript compiler AST (`ts.createSourceFile`), **Big-O
 Most performance bugs in JavaScript and TypeScript do not come from slow syntax—they come from **accidental asymptotic growth**:
 
 - Calling `.includes()`, `.indexOf()`, or `.filter()` inside a `for` loop (`O(n²)`)
+- Spreading accumulators (`{ ...acc }` / `[...acc]`) inside `.reduce()` or loops (`O(n²)`)
+- Calling `.shift()`, `.unshift()`, `.splice()`, `JSON.stringify()`, or `Object.keys()` inside loops (`O(n²)`)
 - Calling a seemingly harmless `O(n)` helper function inside a loop (`O(n²)`)
 - Re-sorting inside an outer loop (`O(n * m log m)`)
 - Writing unmemoized branching recursion (`O(2^n)`)
@@ -34,7 +36,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.0.1.vsix
+code --install-extension bigo-complexity-analyzer-1.1.0.vsix
 ```
 
 ---
@@ -125,11 +127,21 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 | :--- | :--- | :--- |
 | Plain expressions / constant-bounded `for` (`<= 1000`) | `O(1)` | `O(1)` |
 | Halving / doubling loops (`*= 2`, `/= 2`, `>> 1` midpoint) | `O(log n)` | `O(1)` |
+| Square-root bounded loops (`i * i <= n`, `i <= Math.sqrt(n)`) | `O(√n)` | `O(1)` |
 | Single loop (`for`, `for-of`, `for-in`, `while`, `do-while`) or `.map`/`.filter`/`.includes` | `O(n)` | `O(1)` (or `O(n)` if allocating) |
-| `.sort()` standalone / inside 1 loop | `O(n log n)` / `O(n * m log m)` | `O(1)` |
+| `.sort()` standalone / Divide-and-conquer (`mergeSort`) / `.sort()` in loop | `O(n log n)` / `O(n * m log m)` | `O(1)` / `O(n)` |
+| Spread in loop or `.reduce()`, `.shift()`/`.splice()` in loop, `JSON`/`Object.*` in loop | `O(n²)`+ | Scales with allocations |
 | Nested loops / nested array methods (depth `k`) | `O(n²)`, `O(n³)`, `O(n^k)` | Scales with nested allocations |
 | Linear recursion / Memoized recursion | `O(n)` | `O(n)` call stack |
-| Branching recursion (2+ recursive calls without memoization) | `O(2^n)` | `O(n)` call stack |
+| Branching recursion (2+ recursive calls without memoization or split) | `O(2^n)` | `O(n)` call stack |
+
+---
+
+## Dashboard, Quick Fixes & Workspace Audit
+
+- **Interactive Big-O Dashboard (`Big-O: Open Complexity Dashboard`):** Click the status bar item or run the command to view an interactive SVG Big-O growth chart with an input-size `n` slider, worst-first function breakdown, and click-to-jump navigation.
+- **Workspace Hotspot Scan (`Big-O: Scan Workspace Hotspots`):** Scans all `.ts`, `.tsx`, `.js`, and `.jsx` files in your workspace and lists every hotspot sorted worst-first.
+- **Quick Fixes (`Ctrl+.`):** Directly from any diagnostic, suppress intentional hotspots with `// bigo-ignore` or jump into the Complexity Dashboard.
 
 ---
 
@@ -148,6 +160,8 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 ### Commands
 - **`Big-O: Jump to Bottleneck`** (`bigoAnalyzer.revealBottleneck`) — Jumps to and selects the worst-case construct inside a function.
 - **`Big-O: Toggle Complexity Annotations`** (`bigoAnalyzer.toggleEnabled`) — Toggles the extension on/off globally.
+- **`Big-O: Open Complexity Dashboard`** (`bigoAnalyzer.openDashboard`) — Opens the interactive SVG Big-O growth chart and current-file breakdown.
+- **`Big-O: Scan Workspace Hotspots`** (`bigoAnalyzer.scanWorkspace`) — Audits all JS/TS files in the workspace and lists hotspots worst-first.
 
 ---
 

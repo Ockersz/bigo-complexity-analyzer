@@ -184,3 +184,43 @@ export function ignoredNestedExample(items: number[]): number {
   }
   return total;
 }
+
+// 18. Hidden O(n²) trap: spreading accumulator inside .reduce()
+export function reduceSpreadTrap(items: { id: string; value: number }[]): Record<string, number> {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    return { ...acc, [item.id]: item.value };
+  }, {});
+}
+
+// 19. Hidden O(n²) trap: array .shift() inside while loop
+export function queueShiftTrap(queue: number[]): number {
+  let sum = 0;
+  while (queue.length > 0) {
+    sum += queue.shift() ?? 0;
+  }
+  return sum;
+}
+
+// 20. Square-root loop: O(√n) Time | O(1) Space
+export function isPrime(n: number): boolean {
+  if (n < 2) {
+    return false;
+  }
+  for (let i = 2; i * i <= n; i++) {
+    if (n % i === 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 21. Divide-and-conquer recursion: O(n log n) Time | O(n) Space
+export function mergeSort(arr: number[]): number[] {
+  if (arr.length <= 1) {
+    return arr;
+  }
+  const mid = Math.floor(arr.length / 2);
+  const left = mergeSort(arr.slice(0, mid));
+  const right = mergeSort(arr.slice(mid));
+  return left.concat(right);
+}

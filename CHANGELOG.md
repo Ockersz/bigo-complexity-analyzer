@@ -2,6 +2,14 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.1.0] - 2026-11-25
+
+### Added
+- **Hidden `O(n)` JS/TS Anti-Pattern Engine:** Detects object/array spread inside loops or `.reduce()` (`{ ...acc }`, `[...acc]`), `.shift()` / `.unshift()` / `.splice()` inside loops, `JSON.parse`/`stringify` & `Object.keys`/`values`/`entries`/`assign` inside loops, and `new RegExp(...)` compilation inside loops.
+- **Square-Root & Divide-and-Conquer Heuristics:** Detects `O(√n)` loops (`i * i <= n`, `i <= Math.sqrt(n)`) and divide-and-conquer recursion (`mergeSort`/`quickSort` → `O(n log n)`).
+- **Quick Fix Actions (`Ctrl+.`):** One-click `// bigo-ignore` suppression and quick navigation to the Complexity Dashboard directly from diagnostics.
+- **Interactive Big-O Complexity Dashboard & Workspace Scan:** Theme-aware Webview with an interactive SVG asymptotic growth curve chart, `n` slider, worst-first file breakdown, and workspace-wide hotspot scanning (`Big-O: Open Complexity Dashboard`, `Big-O: Scan Workspace Hotspots`).
+
 ## [1.0.1] - 2026-11-25
 
 ### Added
