@@ -51,7 +51,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.1.2.vsix
+code --install-extension bigo-complexity-analyzer-1.1.3.vsix
 ```
 
 ---

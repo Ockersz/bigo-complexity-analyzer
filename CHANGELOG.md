@@ -2,6 +2,11 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.1.3] - 2026-11-25
+
+### Changed
+- Updated Marketplace & Open VSX README documentation.
+
 ## [1.1.2] - 2026-11-25
 
 ### Improved
