@@ -349,6 +349,17 @@ export function activate(context: vscode.ExtensionContext): void {
     scanWorkspaceHotspots
   );
 
+  const openWalkthroughCommand = vscode.commands.registerCommand(
+    'bigoAnalyzer.openWalkthrough',
+    async () => {
+      await vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        'Ockersz.bigo-complexity-analyzer#bigo.gettingStarted',
+        false
+      );
+    }
+  );
+
   context.subscriptions.push(
     hotspotDecorationType,
     diagnosticCollection,
@@ -358,6 +369,7 @@ export function activate(context: vscode.ExtensionContext): void {
     toggleEnabledCommand,
     openDashboardCommand,
     scanWorkspaceCommand,
+    openWalkthroughCommand,
     vscode.languages.registerCodeLensProvider(DOCUMENT_SELECTOR, codeLensProvider),
     vscode.languages.registerHoverProvider(DOCUMENT_SELECTOR, hoverProvider),
     vscode.languages.registerCodeActionsProvider(

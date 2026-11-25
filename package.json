@@ -2,7 +2,7 @@
   "name": "bigo-complexity-analyzer",
   "displayName": "Big-O Complexity Analyzer",
   "description": "Inline time and space complexity (Big-O) analysis for JavaScript and TypeScript files using the TypeScript AST.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "Ockersz",
   "license": "MIT",
   "repository": {
@@ -57,11 +57,67 @@
       },
       {
         "command": "bigoAnalyzer.openDashboard",
-        "title": "Big-O: Open Complexity Dashboard"
+        "title": "Big-O: Open Complexity Dashboard",
+        "icon": "$(graph)"
       },
       {
         "command": "bigoAnalyzer.scanWorkspace",
-        "title": "Big-O: Scan Workspace Hotspots"
+        "title": "Big-O: Scan Workspace Hotspots",
+        "icon": "$(search)"
+      },
+      {
+        "command": "bigoAnalyzer.openWalkthrough",
+        "title": "Big-O: Open Getting Started Walkthrough"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "bigoAnalyzer.openDashboard",
+          "group": "navigation",
+          "when": "resourceLangId == typescript || resourceLangId == typescriptreact || resourceLangId == javascript || resourceLangId == javascriptreact"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "bigo.gettingStarted",
+        "title": "Big-O Complexity Analyzer",
+        "description": "See Time & Space Complexity inline, explore the interactive growth chart, and scan your workspace for hotspots.",
+        "steps": [
+          {
+            "id": "bigo.inline",
+            "title": "See Inline Complexity & Hover Tips",
+            "description": "Open any JS or TS file to view CodeLens summaries above functions, hover breakdowns, and worst-bottleneck highlights.",
+            "media": {
+              "markdown": "walkthrough/inline.md"
+            }
+          },
+          {
+            "id": "bigo.dashboard",
+            "title": "Open the Interactive Big-O Dashboard",
+            "description": "Click the graph icon in the top-right editor toolbar, click the bottom-right Status Bar item, or use the button below.",
+            "media": {
+              "markdown": "walkthrough/dashboard.md"
+            }
+          },
+          {
+            "id": "bigo.workspace",
+            "title": "Scan Your Workspace for Hotspots",
+            "description": "Audit every JS/TS file in your repository worst-first and jump directly to nested loops or hidden O(n²) traps.",
+            "media": {
+              "markdown": "walkthrough/workspace.md"
+            }
+          },
+          {
+            "id": "bigo.quickfixes",
+            "title": "Suppress with // bigo-ignore & Customize Thresholds",
+            "description": "Press Ctrl+. on any diagnostic for one-click Quick Fixes or tune when 🔥 hotspots trigger.",
+            "media": {
+              "markdown": "walkthrough/quickfixes.md"
+            }
+          }
+        ]
       }
     ],
     "configuration": {

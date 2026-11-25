@@ -2,6 +2,13 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.1.1] - 2026-11-25
+
+### Added
+- **Editor Title Bar Button (`$(graph)`):** One-click **Open Big-O Dashboard** button directly in the top-right editor toolbar for JS/TS files.
+- **Getting Started Walkthrough:** Built-in 4-step interactive VS Code / Antigravity walkthrough (`Big-O: Open Getting Started Walkthrough`) covering inline analysis, Dashboard, Workspace Scan, and Quick Fixes.
+- **Visual README Demos:** Added animated workflow demo (`images/demo.gif`), Dashboard preview (`images/dashboard-preview.png`), and a Quick Access Cheat Sheet.
+
 ## [1.1.0] - 2026-11-25
 
 ### Added

@@ -4,6 +4,21 @@
 
 Powered by the official TypeScript compiler AST (`ts.createSourceFile`), **Big-O Complexity Analyzer** evaluates your functions as you type—with no API keys, no cloud LLM latency, and no native binary dependencies.
 
+![Big-O Complexity Analyzer Demo](images/demo.gif)
+
+---
+
+## Quick Access Cheat Sheet
+
+| Feature | How to Access |
+| :--- | :--- |
+| **Interactive Big-O Dashboard** | Click the **`📊` graph icon** in the top-right editor toolbar, click **`🔥 Big-O: ...`** in the bottom-right status bar, or run `Big-O: Open Complexity Dashboard` |
+| **Workspace Hotspot Scan** | Click **`Scan Workspace Hotspots`** inside the Dashboard or run `Big-O: Scan Workspace Hotspots` |
+| **Inline CodeLens** | Shown directly above every function, method, and arrow function — click to jump to the bottleneck line |
+| **Hover Breakdown & Tips** | Hover over any function header for Total vs. Self complexity, reasons, and refactoring tips |
+| **Quick Fixes (`Ctrl+.`)** | Press `Ctrl+.` on any diagnostic to insert `// bigo-ignore` or open the Dashboard |
+| **Interactive Walkthrough** | Run `Big-O: Open Getting Started Walkthrough` (or click **Get Started** on the extension page) |
+
 ---
 
 ## Why This Was Built
@@ -36,7 +51,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.1.0.vsix
+code --install-extension bigo-complexity-analyzer-1.1.1.vsix
 ```
 
 ---
@@ -139,7 +154,9 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 
 ## Dashboard, Quick Fixes & Workspace Audit
 
-- **Interactive Big-O Dashboard (`Big-O: Open Complexity Dashboard`):** Click the status bar item or run the command to view an interactive SVG Big-O growth chart with an input-size `n` slider, worst-first function breakdown, and click-to-jump navigation.
+![Interactive Big-O Complexity Dashboard](images/dashboard-preview.png)
+
+- **Interactive Big-O Dashboard (`Big-O: Open Complexity Dashboard`):** Click the **`📊` graph icon** in the editor toolbar or click the bottom-right status bar item to view an interactive SVG Big-O growth chart with an input-size `n` slider, worst-first function breakdown, and click-to-jump navigation.
 - **Workspace Hotspot Scan (`Big-O: Scan Workspace Hotspots`):** Scans all `.ts`, `.tsx`, `.js`, and `.jsx` files in your workspace and lists every hotspot sorted worst-first.
 - **Quick Fixes (`Ctrl+.`):** Directly from any diagnostic, suppress intentional hotspots with `// bigo-ignore` or jump into the Complexity Dashboard.
 
@@ -162,6 +179,7 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 - **`Big-O: Toggle Complexity Annotations`** (`bigoAnalyzer.toggleEnabled`) — Toggles the extension on/off globally.
 - **`Big-O: Open Complexity Dashboard`** (`bigoAnalyzer.openDashboard`) — Opens the interactive SVG Big-O growth chart and current-file breakdown.
 - **`Big-O: Scan Workspace Hotspots`** (`bigoAnalyzer.scanWorkspace`) — Audits all JS/TS files in the workspace and lists hotspots worst-first.
+- **`Big-O: Open Getting Started Walkthrough`** (`bigoAnalyzer.openWalkthrough`) — Opens the built-in 4-step interactive walkthrough inside VS Code / Antigravity IDE.
 
 ---
 
