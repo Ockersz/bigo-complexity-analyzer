@@ -151,13 +151,28 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 
 ---
 
-## Publishing to the VS Code Marketplace
+## Publishing & Automated Releases (Zero Secrets / OIDC)
 
-1. **Create a Publisher:** Sign in to the [Visual Studio Marketplace Publisher Portal](https://marketplace.visualstudio.com/manage/publishers/) and create a publisher matching `"publisher"` in `package.json` (currently `"Ockersz"`).
-2. **Icon Included:** A `256×256` PNG icon is already included at `images/icon.png` and configured via `"icon": "images/icon.png"` in `package.json`.
-3. **Package & Publish:**
-   - **Web Portal Upload (simplest):** Run `npm run package:vsix` to generate `bigo-complexity-analyzer-1.0.1.vsix`, then upload it in the Publisher Management Portal.
-   - **CI / Automated (`Trusted Publishing`):** Configure GitHub Actions OIDC Trusted Publishing in the Marketplace Publisher Portal (recommended over legacy Azure DevOps PATs, which Microsoft is retiring on December 1, 2026) and run `npx @vscode/vsce publish`.
+This repo includes [ci.yml](.github/workflows/ci.yml) (runs on pushes/PRs to `main`) and [publish.yml](.github/workflows/publish.yml) (automatically tests, packages, creates a GitHub Release, and publishes to both **VS Code Marketplace** and **Open VSX** on any `v*` tag using **Trusted Publishing OIDC**—no stored PAT secrets required).
+
+### One-Time Trusted Publishing Setup
+1. **VS Code Marketplace ([Publisher Portal](https://marketplace.visualstudio.com/manage)):**
+   - Go to **Ockersz → Trusted Publishing → Create**:
+   - **Repository Owner:** `Ockersz`
+   - **Repository:** `bigo-complexity-analyzer`
+   - **Workflow:** `publish.yml`
+2. **Open VSX ([Trusted Publishers](https://open-vsx.org/user-settings/trusted-publishers)):**
+   - Once your `Ockersz` namespace claim is verified, click **Add**:
+   - **Provider:** `GitHub Actions`
+   - **Repository:** `Ockersz/bigo-complexity-analyzer`
+   - **Workflow File:** `publish.yml`
+   - **Extension:** `bigo-complexity-analyzer`
+
+### Releasing a New Version
+```bash
+npm version patch && git push --follow-tags
+```
+Pushing the `v*` tag automatically triggers `publish.yml` to update VS Code Marketplace, Open VSX (Antigravity IDE), and GitHub Releases.
 
 ## Local Development
 
