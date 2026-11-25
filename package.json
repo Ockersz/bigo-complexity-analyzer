@@ -1,0 +1,111 @@
+{
+  "name": "bigo-complexity-analyzer",
+  "displayName": "Big-O Complexity Analyzer",
+  "description": "Inline time and space complexity (Big-O) analysis for JavaScript and TypeScript files using the TypeScript AST.",
+  "version": "1.0.0",
+  "publisher": "Ockersz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ockersz/bigo-complexity-analyzer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ockersz/bigo-complexity-analyzer/issues"
+  },
+  "homepage": "https://github.com/Ockersz/bigo-complexity-analyzer#readme",
+  "keywords": [
+    "big-o",
+    "time complexity",
+    "space complexity",
+    "complexity analyzer",
+    "typescript",
+    "javascript",
+    "ast",
+    "performance",
+    "codelens",
+    "algorithms"
+  ],
+  "galleryBanner": {
+    "color": "#1E1E2E",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "bigoAnalyzer.revealBottleneck",
+        "title": "Big-O: Jump to Bottleneck"
+      },
+      {
+        "command": "bigoAnalyzer.toggleEnabled",
+        "title": "Big-O: Toggle Complexity Annotations"
+      }
+    ],
+    "configuration": {
+      "title": "Big-O Complexity Analyzer",
+      "properties": {
+        "bigoAnalyzer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline time and space complexity analysis."
+        },
+        "bigoAnalyzer.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Display CodeLens complexity summaries above functions."
+        },
+        "bigoAnalyzer.showDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight the worst-case bottleneck line in the active editor."
+        },
+        "bigoAnalyzer.hotspotThreshold": {
+          "type": "string",
+          "enum": ["O(n log n)", "O(n²)", "O(2^n)"],
+          "default": "O(n²)",
+          "description": "Minimum complexity level flagged as a hotspot (🔥)."
+        },
+        "bigoAnalyzer.showDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report hotspot functions in the VS Code Problems panel."
+        },
+        "bigoAnalyzer.diagnosticSeverity": {
+          "type": "string",
+          "enum": ["Hint", "Information", "Warning"],
+          "default": "Information",
+          "description": "Severity level for hotspot diagnostics."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "npm run check-types && node esbuild.js --production",
+    "package:vsix": "npm run package && npx --yes @vscode/vsce package",
+    "vscode:prepublish": "npm run package",
+    "test": "node -e \"require('esbuild').buildSync({entryPoints:['src/analyzer.test.ts'],bundle:true,platform:'node',format:'cjs',outfile:'dist-test/analyzer.test.js'})\" && node --test dist-test/analyzer.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}
