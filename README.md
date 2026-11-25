@@ -187,18 +187,6 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 
 This repo includes [ci.yml](.github/workflows/ci.yml) (runs on pushes/PRs to `main`) and [publish.yml](.github/workflows/publish.yml) (automatically tests, packages, creates a GitHub Release, and publishes to both **VS Code Marketplace** and **Open VSX** on any `v*` tag using **Trusted Publishing OIDC**—no stored PAT secrets required).
 
-### One-Time Trusted Publishing Setup
-1. **VS Code Marketplace ([Publisher Portal](https://marketplace.visualstudio.com/manage)):**
-   - Go to **Ockersz → Trusted Publishing → Create**:
-   - **Repository Owner:** `Ockersz`
-   - **Repository:** `bigo-complexity-analyzer`
-   - **Workflow:** `publish.yml`
-2. **Open VSX ([Trusted Publishers](https://open-vsx.org/user-settings/trusted-publishers)):**
-   - Once your `Ockersz` namespace claim is verified, click **Add**:
-   - **Provider:** `GitHub Actions`
-   - **Repository:** `Ockersz/bigo-complexity-analyzer`
-   - **Workflow File:** `publish.yml`
-   - **Extension:** `bigo-complexity-analyzer`
 
 ### Releasing a New Version
 ```bash
