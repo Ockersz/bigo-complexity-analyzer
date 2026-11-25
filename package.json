@@ -29,6 +29,7 @@
     "color": "#1E1E2E",
     "theme": "dark"
   },
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
