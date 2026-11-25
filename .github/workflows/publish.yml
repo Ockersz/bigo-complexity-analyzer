@@ -5,6 +5,16 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Marketplace target to publish to'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - vscode
+          - openvsx
 
 jobs:
   build:
@@ -42,6 +52,7 @@ jobs:
   publish-vscode:
     name: Publish to VS Code Marketplace
     needs: build
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'vscode'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,11 +72,12 @@ jobs:
       - name: Publish via OIDC Trusted Publishing
         run: |
           VSIX_FILE=$(ls *.vsix | head -n 1)
-          npx --yes @vscode/vsce publish --packagePath "$VSIX_FILE"
+          npx --yes @vscode/vsce publish --oidc --packagePath "$VSIX_FILE"
 
   publish-openvsx:
     name: Publish to Open VSX
     needs: build
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'openvsx'
     runs-on: ubuntu-latest
     permissions:
       contents: read
