@@ -2,7 +2,7 @@
   "name": "bigo-complexity-analyzer",
   "displayName": "Big-O Complexity Analyzer",
   "description": "Inline time and space complexity (Big-O) analysis for JavaScript and TypeScript files using the TypeScript AST.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "Ockersz",
   "license": "MIT",
   "repository": {
@@ -76,7 +76,11 @@
         },
         "bigoAnalyzer.hotspotThreshold": {
           "type": "string",
-          "enum": ["O(n log n)", "O(n²)", "O(2^n)"],
+          "enum": [
+            "O(n log n)",
+            "O(n²)",
+            "O(2^n)"
+          ],
           "default": "O(n²)",
           "description": "Minimum complexity level flagged as a hotspot (🔥)."
         },
@@ -87,7 +91,11 @@
         },
         "bigoAnalyzer.diagnosticSeverity": {
           "type": "string",
-          "enum": ["Hint", "Information", "Warning"],
+          "enum": [
+            "Hint",
+            "Information",
+            "Warning"
+          ],
           "default": "Information",
           "description": "Severity level for hotspot diagnostics."
         }

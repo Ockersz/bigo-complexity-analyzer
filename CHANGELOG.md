@@ -2,6 +2,11 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.0.1] - 2026-11-25
+
+### Added
+- Added a `256×256` PNG Marketplace extension icon (`images/icon.png`) and Marketplace manifest metadata.
+
 ## [1.0.0] - 2026-11-25
 
 ### Added

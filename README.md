@@ -34,7 +34,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.0.0.vsix
+code --install-extension bigo-complexity-analyzer-1.0.1.vsix
 ```
 
 ---
@@ -156,7 +156,7 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 1. **Create a Publisher:** Sign in to the [Visual Studio Marketplace Publisher Portal](https://marketplace.visualstudio.com/manage/publishers/) and create a publisher matching `"publisher"` in `package.json` (currently `"Ockersz"`).
 2. **Icon Included:** A `256×256` PNG icon is already included at `images/icon.png` and configured via `"icon": "images/icon.png"` in `package.json`.
 3. **Package & Publish:**
-   - **Web Portal Upload (simplest):** Run `npm run package:vsix` to generate `bigo-complexity-analyzer-1.0.0.vsix`, then upload it in the Publisher Management Portal.
+   - **Web Portal Upload (simplest):** Run `npm run package:vsix` to generate `bigo-complexity-analyzer-1.0.1.vsix`, then upload it in the Publisher Management Portal.
    - **CI / Automated (`Trusted Publishing`):** Configure GitHub Actions OIDC Trusted Publishing in the Marketplace Publisher Portal (recommended over legacy Azure DevOps PATs, which Microsoft is retiring on December 1, 2026) and run `npx @vscode/vsce publish`.
 
 ## Local Development
