@@ -51,7 +51,7 @@ ext install Ockersz.bigo-complexity-analyzer
 ### From a Local `.vsix` File
 ```bash
 npm run package:vsix
-code --install-extension bigo-complexity-analyzer-1.1.3.vsix
+code --install-extension bigo-complexity-analyzer-1.2.0.vsix
 ```
 
 ---
@@ -173,13 +173,46 @@ Calling `linearFind(row, target)` imported from `./helpers` inside a `for-of` lo
 | `bigoAnalyzer.hotspotThreshold` | `string` | `"O(n²)"` | Minimum complexity flagged as `🔥` (`O(n log n)`, `O(n²)`, `O(2^n)`). |
 | `bigoAnalyzer.showDiagnostics` | `boolean` | `true` | Report hotspot functions in the VS Code Problems panel. |
 | `bigoAnalyzer.diagnosticSeverity` | `string` | `"Information"` | Diagnostic severity (`Hint`, `Information`, `Warning`). |
+| `bigoAnalyzer.preset` | `string` | `"recommended"` | Team rule preset (`relaxed`, `recommended`, `strict`). |
+| `bigoAnalyzer.rules` | `object` | `{}` | Per-rule severity overrides (`off`, `hint`, `info`, `warning`). |
+| `bigoAnalyzer.ignore` | `string[]` | `[]` | Glob patterns of files to skip from analysis. |
 
 ### Commands
 - **`Big-O: Jump to Bottleneck`** (`bigoAnalyzer.revealBottleneck`) — Jumps to and selects the worst-case construct inside a function.
 - **`Big-O: Toggle Complexity Annotations`** (`bigoAnalyzer.toggleEnabled`) — Toggles the extension on/off globally.
 - **`Big-O: Open Complexity Dashboard`** (`bigoAnalyzer.openDashboard`) — Opens the interactive SVG Big-O growth chart and current-file breakdown.
 - **`Big-O: Scan Workspace Hotspots`** (`bigoAnalyzer.scanWorkspace`) — Audits all JS/TS files in the workspace and lists hotspots worst-first.
+- **`Big-O: Create Team Config (.bigorc.json)`** (`bigoAnalyzer.initConfig`) — Creates and opens a starter `.bigorc.json` in your workspace root.
 - **`Big-O: Open Getting Started Walkthrough`** (`bigoAnalyzer.openWalkthrough`) — Opens the built-in 4-step interactive walkthrough inside VS Code / Antigravity IDE.
+
+---
+
+## Team Rule Sets (`.bigorc.json` & Presets)
+
+Commit a `.bigorc.json` file in your repository root (or run **`Big-O: Create Team Config (.bigorc.json)`**) to enforce shared Big-O standards across your team—edits reload automatically on save.
+
+```json
+{
+  "preset": "recommended",
+  "rules": {
+    "noSpreadInLoop": "warning",
+    "noShiftInLoop": "warning",
+    "noHeavyLoopOp": "info",
+    "noRegexInLoop": "info",
+    "noNestedArrayLookup": "info",
+    "noSortInLoop": "info"
+  },
+  "ignore": ["**/*.test.ts", "scripts/**"]
+}
+```
+
+| Preset | Default Threshold | Default Severity | Behavior |
+| :--- | :--- | :--- | :--- |
+| `relaxed` | `O(n²)` | `Hint` | Flags quadratic loops, spreads, `.shift()`, and nested lookups; turns off `.sort()`, `JSON`/`Object.*`, and `RegExp` rules. |
+| `recommended` | `O(n²)` | `Information` | Balanced defaults with all 6 anti-pattern rules enabled at `info`. |
+| `strict` | `O(n log n)` | `Warning` | Flags `O(n log n)`+ hotspots and elevates all 6 anti-pattern rules to `warning`. |
+
+Supported rule keys: `noSpreadInLoop`, `noShiftInLoop`, `noHeavyLoopOp`, `noRegexInLoop`, `noNestedArrayLookup`, `noSortInLoop` (each accepts `"off"`, `"hint"`, `"info"`, or `"warning"`).
 
 ---
 

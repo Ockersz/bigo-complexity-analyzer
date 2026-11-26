@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { FunctionComplexity } from './analyzer';
 import { AnalysisCache } from './cache';
-import { getHotspotThresholdScore } from './codeLensProvider';
 
 export const OPEN_DASHBOARD_COMMAND = 'bigoAnalyzer.openDashboard';
 
@@ -22,9 +21,7 @@ export class BigOCodeActionProvider implements vscode.CodeActionProvider {
       return [];
     }
 
-    const config = vscode.workspace.getConfiguration('bigoAnalyzer');
-    const threshold = getHotspotThresholdScore(config);
-    const functions = this.cache.getOrAnalyze(document, threshold);
+    const functions = this.cache.getOrAnalyze(document);
     const matchedFn = this.findMatchingFunction(document, functions, range, bigoDiagnostics[0]);
 
     const actions: vscode.CodeAction[] = [];

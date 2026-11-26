@@ -4,9 +4,9 @@ import { AnalysisCache } from './cache';
 import { BigOCodeActionProvider, OPEN_DASHBOARD_COMMAND } from './codeActionProvider';
 import {
   BigOCodeLensProvider,
-  getHotspotThresholdScore,
   REVEAL_BOTTLENECK_COMMAND,
 } from './codeLensProvider';
+import { DiagnosticSeverityLabel, ResolvedBigOConfig, RuleLevel } from './config';
 import { BigODashboardPanel, WorkspaceFunctionEntry } from './dashboardPanel';
 import { BigOHoverProvider } from './hoverProvider';
 
@@ -22,6 +22,24 @@ const DOCUMENT_SELECTOR: vscode.DocumentSelector = SUPPORTED_LANGUAGES.map((lang
 }));
 
 const SCAN_WORKSPACE_COMMAND = 'bigoAnalyzer.scanWorkspace';
+const INIT_CONFIG_COMMAND = 'bigoAnalyzer.initConfig';
+
+const STARTER_BIGORC = `{
+  "preset": "recommended",
+  "rules": {
+    "noSpreadInLoop": "warning",
+    "noShiftInLoop": "warning",
+    "noHeavyLoopOp": "info",
+    "noRegexInLoop": "info",
+    "noNestedArrayLookup": "info",
+    "noSortInLoop": "info"
+  },
+  "ignore": [
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}
+`;
 
 function isSupportedDocument(document: vscode.TextDocument): boolean {
   return SUPPORTED_LANGUAGES.includes(document.languageId);
@@ -40,9 +58,20 @@ function findWorstBottleneck(functions: FunctionComplexity[]): FunctionComplexit
   return worst;
 }
 
-function getDiagnosticSeverity(config: vscode.WorkspaceConfiguration): vscode.DiagnosticSeverity {
-  const level = config.get<string>('diagnosticSeverity', 'Information');
-  switch (level) {
+function mapDiagnosticSeverity(
+  defaultLabel: DiagnosticSeverityLabel,
+  ruleSeverity: RuleLevel | null
+): vscode.DiagnosticSeverity {
+  if (ruleSeverity === 'warning') {
+    return vscode.DiagnosticSeverity.Warning;
+  }
+  if (ruleSeverity === 'hint') {
+    return vscode.DiagnosticSeverity.Hint;
+  }
+  if (ruleSeverity === 'info') {
+    return vscode.DiagnosticSeverity.Information;
+  }
+  switch (defaultLabel) {
     case 'Warning':
       return vscode.DiagnosticSeverity.Warning;
     case 'Hint':
@@ -96,8 +125,6 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const scanWorkspaceHotspots = async (): Promise<void> => {
-    const config = vscode.workspace.getConfiguration('bigoAnalyzer');
-    const threshold = getHotspotThresholdScore(config);
     const entries: WorkspaceFunctionEntry[] = [];
 
     await vscode.window.withProgress(
@@ -128,7 +155,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!isSupportedDocument(doc)) {
               continue;
             }
-            const functions = cache.getOrAnalyze(doc, threshold);
+            const functions = cache.getOrAnalyze(doc);
             const rel = vscode.workspace.asRelativePath(uri);
             for (const fn of functions) {
               if (!fn.ignored && fn.isHotspot) {
@@ -152,7 +179,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     const editor = vscode.window.activeTextEditor;
     if (editor && isSupportedDocument(editor.document)) {
-      const fns = cache.getOrAnalyze(editor.document, threshold);
+      const fns = cache.getOrAnalyze(editor.document);
       panel.updateCurrentFile(editor.document.fileName, editor.document.uri.toString(), fns);
     }
     panel.updateWorkspaceHotspots(entries);
@@ -161,7 +188,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const updateDiagnosticsForDocument = (
     document: vscode.TextDocument,
     functions: FunctionComplexity[],
-    config: vscode.WorkspaceConfiguration
+    config: vscode.WorkspaceConfiguration,
+    resolvedConfig: ResolvedBigOConfig
   ): void => {
     const enabled = config.get<boolean>('enabled', true);
     const showDiagnostics = config.get<boolean>('showDiagnostics', true);
@@ -171,11 +199,15 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const severity = getDiagnosticSeverity(config);
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (const fn of functions) {
-      if (fn.ignored || !fn.isHotspot) {
+      if (fn.ignored) {
+        continue;
+      }
+      const hasRuleMatch =
+        fn.triggeredRule !== null && fn.ruleSeverity !== null && fn.ruleSeverity !== 'off';
+      if (!fn.isHotspot && !hasRuleMatch) {
         continue;
       }
 
@@ -194,8 +226,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const tipSuffix = fn.optimizationTip ? ` Tip: ${fn.optimizationTip}` : '';
       const message = `${fn.name}() has ${fn.timeComplexity} time (${fn.spaceComplexity} space).${tipSuffix}`;
+      const severity = mapDiagnosticSeverity(resolvedConfig.defaultSeverity, fn.ruleSeverity);
       const diagnostic = new vscode.Diagnostic(range, message, severity);
       diagnostic.source = 'Big-O Analyzer';
+      if (fn.triggeredRule) {
+        diagnostic.code = fn.triggeredRule;
+      }
       diagnostics.push(diagnostic);
     }
 
@@ -244,10 +280,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const config = vscode.workspace.getConfiguration('bigoAnalyzer');
+    const config = vscode.workspace.getConfiguration('bigoAnalyzer', editor.document.uri);
     const enabled = config.get<boolean>('enabled', true);
     const showDecorations = config.get<boolean>('showDecorations', true);
-    const threshold = getHotspotThresholdScore(config);
 
     if (!enabled) {
       editor.setDecorations(hotspotDecorationType, []);
@@ -256,8 +291,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const functions = cache.getOrAnalyze(editor.document, threshold);
-    updateDiagnosticsForDocument(editor.document, functions, config);
+    const resolvedConfig = cache.getConfigForDocument(editor.document);
+    const functions = cache.getOrAnalyze(editor.document);
+    updateDiagnosticsForDocument(editor.document, functions, config, resolvedConfig);
     updateStatusBar(editor.document, functions, enabled);
 
     const dashboard = BigODashboardPanel.getCurrent();
@@ -340,9 +376,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       const editor = vscode.window.activeTextEditor;
       if (editor && isSupportedDocument(editor.document)) {
-        const config = vscode.workspace.getConfiguration('bigoAnalyzer');
-        const threshold = getHotspotThresholdScore(config);
-        const fns = cache.getOrAnalyze(editor.document, threshold);
+        const fns = cache.getOrAnalyze(editor.document);
         panel.updateCurrentFile(editor.document.fileName, editor.document.uri.toString(), fns);
       }
     }
@@ -351,6 +385,28 @@ export function activate(context: vscode.ExtensionContext): void {
   const scanWorkspaceCommand = vscode.commands.registerCommand(
     SCAN_WORKSPACE_COMMAND,
     scanWorkspaceHotspots
+  );
+
+  const initConfigCommand = vscode.commands.registerCommand(
+    INIT_CONFIG_COMMAND,
+    async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      if (!folder) {
+        vscode.window.showWarningMessage(
+          'Open a workspace folder before creating a .bigorc.json config.'
+        );
+        return;
+      }
+
+      const rcUri = vscode.Uri.joinPath(folder.uri, '.bigorc.json');
+      try {
+        await vscode.workspace.fs.stat(rcUri);
+      } catch {
+        await vscode.workspace.fs.writeFile(rcUri, Buffer.from(STARTER_BIGORC, 'utf8'));
+      }
+      const doc = await vscode.workspace.openTextDocument(rcUri);
+      await vscode.window.showTextDocument(doc);
+    }
   );
 
   const openWalkthroughCommand = vscode.commands.registerCommand(
@@ -364,15 +420,27 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const rcWatcher = vscode.workspace.createFileSystemWatcher('**/.bigorc.json');
+  const refreshOnConfigChange = (): void => {
+    cache.invalidateAll();
+    updateEditorState(vscode.window.activeTextEditor);
+    codeLensProvider.refresh();
+  };
+
   context.subscriptions.push(
     hotspotDecorationType,
     diagnosticCollection,
     statusBarItem,
     codeLensProvider,
+    rcWatcher,
+    rcWatcher.onDidCreate(refreshOnConfigChange),
+    rcWatcher.onDidChange(refreshOnConfigChange),
+    rcWatcher.onDidDelete(refreshOnConfigChange),
     revealBottleneckCommand,
     toggleEnabledCommand,
     openDashboardCommand,
     scanWorkspaceCommand,
+    initConfigCommand,
     openWalkthroughCommand,
     vscode.languages.registerCodeLensProvider(DOCUMENT_SELECTOR, codeLensProvider),
     vscode.languages.registerHoverProvider(DOCUMENT_SELECTOR, hoverProvider),

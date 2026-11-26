@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { analyzeCode, FunctionComplexity } from './analyzer';
+import { matchesIgnorePatterns, resolveBigOConfig } from './config';
 
 function byName(results: FunctionComplexity[], name: string): FunctionComplexity {
   const found = results.find((r) => r.name === name);
@@ -565,4 +566,77 @@ test('square-root loops and divide-and-conquer recursion', () => {
   assert.equal(ms.spaceComplexity, 'O(n)');
   assert.equal(ms.isHotspot, false);
   assert.ok(ms.reasons.some((r) => r.includes('Divide-and-conquer')));
+});
+
+test('configurable rule sets: presets, .bigorc.json overrides, and glob ignores', () => {
+  const strict = resolveBigOConfig({}, { preset: 'strict' }, '/repo/.bigorc.json');
+  assert.equal(strict.preset, 'strict');
+  assert.equal(strict.hotspotThresholdScore, 15);
+  assert.equal(strict.defaultSeverity, 'Warning');
+  assert.equal(strict.rules.noSpreadInLoop, 'warning');
+
+  const relaxedOverride = resolveBigOConfig(
+    { preset: 'strict' },
+    { preset: 'relaxed', rules: { noSpreadInLoop: 'warning' }, ignore: ['**/*.test.ts', 'scripts/**'] },
+    '/repo/.bigorc.json'
+  );
+  assert.equal(relaxedOverride.preset, 'relaxed');
+  assert.equal(relaxedOverride.defaultSeverity, 'Hint');
+  assert.equal(relaxedOverride.rules.noHeavyLoopOp, 'off');
+  assert.equal(relaxedOverride.rules.noSpreadInLoop, 'warning');
+
+  assert.equal(matchesIgnorePatterns('src/analyzer.test.ts', relaxedOverride.ignore), true);
+  assert.equal(matchesIgnorePatterns('scripts/deploy.js', relaxedOverride.ignore), true);
+  assert.equal(matchesIgnorePatterns('src/analyzer.ts', relaxedOverride.ignore), false);
+});
+
+test('per-rule toggles disable or downgrade specific anti-patterns', () => {
+  const code = `
+    function spread(items: { id: string }[]) {
+      return items.reduce((acc, x) => ({ ...acc, [x.id]: true }), {});
+    }
+    function shiftQ(q: number[]) {
+      while (q.length) q.shift();
+    }
+    function jsonLoop(rows: unknown[]) {
+      for (const r of rows) JSON.stringify(r);
+    }
+    function regexLoop(lines: string[]) {
+      for (const l of lines) void new RegExp('a').test(l);
+    }
+    function lookupLoop(a: number[], b: number[]) {
+      return a.some((x) => b.includes(x));
+    }
+    function sortLoop(buckets: number[][]) {
+      for (const b of buckets) b.sort((x, y) => x - y);
+    }
+  `;
+
+  const strict = analyzeCode(code, 'file.ts', {
+    rules: resolveBigOConfig({}, { preset: 'strict' }).rules,
+  });
+  assert.equal(byName(strict, 'spread').triggeredRule, 'noSpreadInLoop');
+  assert.equal(byName(strict, 'spread').ruleSeverity, 'warning');
+  assert.equal(byName(strict, 'shiftQ').triggeredRule, 'noShiftInLoop');
+  assert.equal(byName(strict, 'jsonLoop').triggeredRule, 'noHeavyLoopOp');
+  assert.equal(byName(strict, 'regexLoop').triggeredRule, 'noRegexInLoop');
+  assert.equal(byName(strict, 'lookupLoop').triggeredRule, 'noNestedArrayLookup');
+  assert.equal(byName(strict, 'sortLoop').triggeredRule, 'noSortInLoop');
+
+  const disabled = analyzeCode(code, 'file.ts', {
+    rules: {
+      noSpreadInLoop: 'off',
+      noShiftInLoop: 'off',
+      noHeavyLoopOp: 'off',
+      noRegexInLoop: 'off',
+      noNestedArrayLookup: 'off',
+      noSortInLoop: 'off',
+    },
+  });
+  assert.equal(byName(disabled, 'spread').timeComplexity, 'O(n)');
+  assert.equal(byName(disabled, 'shiftQ').timeComplexity, 'O(n)');
+  assert.equal(byName(disabled, 'jsonLoop').timeComplexity, 'O(n)');
+  assert.equal(byName(disabled, 'regexLoop').optimizationTip, null);
+  assert.equal(byName(disabled, 'lookupLoop').timeComplexity, 'O(n)');
+  assert.equal(byName(disabled, 'sortLoop').timeComplexity, 'O(n)');
 });

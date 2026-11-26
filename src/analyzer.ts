@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import { BigORuleSet, PRESET_DEFAULTS, RuleLevel } from './config';
 
 export interface BottleneckLocation {
   line: number;
@@ -22,6 +23,7 @@ export interface ResolvedImportSource {
 
 export interface AnalyzeOptions {
   hotspotThreshold?: number;
+  rules?: Partial<BigORuleSet>;
   resolveImport?: (specifier: string, fromFile: string) => ResolvedImportSource | null;
 }
 
@@ -41,6 +43,8 @@ export interface FunctionComplexity {
   bottleneckScore: number;
   isHotspot: boolean;
   ignored: boolean;
+  triggeredRule: keyof BigORuleSet | null;
+  ruleSeverity: RuleLevel | null;
   reasons: string[];
   bottleneckLocation: BottleneckLocation | null;
   optimizationTip: string | null;
@@ -1104,7 +1108,8 @@ function analyzeFunctionLocal(
   id: number,
   parentFunctionId: number | null,
   sourceFile: ts.SourceFile,
-  importTable: ImportTable
+  importTable: ImportTable,
+  rules: BigORuleSet
 ): LocalFunctionAnalysis {
   const identity = resolveFunctionIdentity(fnNode, sourceFile);
   const ignored = hasBigoIgnoreComment(sourceFile, identity.headerStartOffset);
@@ -1329,7 +1334,11 @@ function analyzeFunctionLocal(
     }
 
     // Hidden O(n) anti-pattern: object or array spread inside a loop or .reduce()
-    if ((ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) && polyDepth >= 1) {
+    if (
+      (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) &&
+      polyDepth >= 1 &&
+      rules.noSpreadInLoop !== 'off'
+    ) {
       const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
       const context = formatContext(outerStack);
       const effectiveDepth = polyDepth + 1;
@@ -1428,27 +1437,29 @@ function analyzeFunctionLocal(
           sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 
         if (methodName === 'sort') {
-          const term: TimeTerm = {
-            kind: 'sort',
-            polyDegree: polyDepth,
-            logPower: logDepth,
-            score: scoreForSort(polyDepth),
-          };
-          const sortComplexity = formatTimeTerm(term);
-          const context = formatContext(outerStack);
-          const description = context
-            ? `.sort()${context} at line ${line} (${sortComplexity})`
-            : `.sort() call at line ${line} (${sortComplexity})`;
-          addReason(description);
-          localCandidates.push({
-            term,
-            complexity: sortComplexity,
-            score: term.score,
-            depth: polyDepth + 1,
-            reason: description,
-            location: makeLocation(node, sourceFile, description),
-            category: 'sort',
-          });
+          if (polyDepth === 0 || rules.noSortInLoop !== 'off') {
+            const term: TimeTerm = {
+              kind: 'sort',
+              polyDegree: polyDepth,
+              logPower: logDepth,
+              score: scoreForSort(polyDepth),
+            };
+            const sortComplexity = formatTimeTerm(term);
+            const context = formatContext(outerStack);
+            const description = context
+              ? `.sort()${context} at line ${line} (${sortComplexity})`
+              : `.sort() call at line ${line} (${sortComplexity})`;
+            addReason(description);
+            localCandidates.push({
+              term,
+              complexity: sortComplexity,
+              score: term.score,
+              depth: polyDepth + 1,
+              reason: description,
+              location: makeLocation(node, sourceFile, description),
+              category: 'sort',
+            });
+          }
 
           visit(node.expression, polyDepth, logDepth, outerStack);
           for (const arg of node.arguments) {
@@ -1515,30 +1526,36 @@ function analyzeFunctionLocal(
         }
 
         if (LINEAR_LOOKUP_METHODS.has(methodName)) {
-          const nextPolyDepth = polyDepth + 1;
-          if (nextPolyDepth > maxPolyDepth) {
-            maxPolyDepth = nextPolyDepth;
+          if (polyDepth === 0 || rules.noNestedArrayLookup !== 'off') {
+            const nextPolyDepth = polyDepth + 1;
+            if (nextPolyDepth > maxPolyDepth) {
+              maxPolyDepth = nextPolyDepth;
+            }
+            const context = formatContext(outerStack);
+            const prefix = context ? 'Nested ' : '';
+            const description = `${prefix}.${methodName}() linear scan${context} at line ${line}`;
+            addReason(description);
+            const term: TimeTerm = {
+              kind: 'poly',
+              polyDegree: nextPolyDepth,
+              logPower: logDepth,
+              score: scoreForPolyLog(nextPolyDepth, logDepth),
+            };
+            localCandidates.push({
+              term,
+              complexity: formatTimeTerm(term),
+              score: term.score,
+              depth: nextPolyDepth + logDepth,
+              reason: description,
+              location: makeLocation(node, sourceFile, description),
+              category: polyDepth >= 1 ? 'array-lookup' : 'loop',
+            });
           }
-          const context = formatContext(outerStack);
-          const prefix = context ? 'Nested ' : '';
-          const description = `${prefix}.${methodName}() linear scan${context} at line ${line}`;
-          addReason(description);
-          const term: TimeTerm = {
-            kind: 'poly',
-            polyDegree: nextPolyDepth,
-            logPower: logDepth,
-            score: scoreForPolyLog(nextPolyDepth, logDepth),
-          };
-          localCandidates.push({
-            term,
-            complexity: formatTimeTerm(term),
-            score: term.score,
-            depth: nextPolyDepth + logDepth,
-            reason: description,
-            location: makeLocation(node, sourceFile, description),
-            category: polyDepth >= 1 ? 'array-lookup' : 'loop',
-          });
-        } else if (LINEAR_ARRAY_MUTATION_METHODS.has(methodName) && polyDepth >= 1) {
+        } else if (
+          LINEAR_ARRAY_MUTATION_METHODS.has(methodName) &&
+          polyDepth >= 1 &&
+          rules.noShiftInLoop !== 'off'
+        ) {
           const effectiveDepth = polyDepth + 1;
           const context = formatContext(outerStack);
           const term: TimeTerm = {
@@ -1589,7 +1606,7 @@ function analyzeFunctionLocal(
 
           if (isObjectReflection || isJsonSerde) {
             const context = formatContext(outerStack);
-            if (polyDepth >= 1) {
+            if (polyDepth >= 1 && rules.noHeavyLoopOp !== 'off') {
               const effectiveDepth = polyDepth + 1;
               const term: TimeTerm = {
                 kind: 'poly',
@@ -1637,7 +1654,7 @@ function analyzeFunctionLocal(
           polyDepth + 1,
           `new ${ctorName}() allocation${context} at line ${line}`
         );
-      } else if (ctorName === 'RegExp' && polyDepth >= 1) {
+      } else if (ctorName === 'RegExp' && polyDepth >= 1 && rules.noRegexInLoop !== 'off') {
         const description = `new RegExp() compiled${context} at line ${line}`;
         addReason(description);
         const term: TimeTerm = {
@@ -1858,6 +1875,28 @@ function collectExportedRebindings(
   return { namedExports, defaultExportId };
 }
 
+function mapCategoryToRule(best: CandidateComplexity | null): keyof BigORuleSet | null {
+  if (!best) {
+    return null;
+  }
+  switch (best.category) {
+    case 'reduce-spread':
+      return 'noSpreadInLoop';
+    case 'queue-mutation':
+      return 'noShiftInLoop';
+    case 'heavy-loop-op':
+      return 'noHeavyLoopOp';
+    case 'regex-in-loop':
+      return 'noRegexInLoop';
+    case 'array-lookup':
+      return 'noNestedArrayLookup';
+    case 'sort':
+      return best.term.polyDegree >= 1 ? 'noSortInLoop' : null;
+    default:
+      return null;
+  }
+}
+
 function analyzeModule(
   sourceText: string,
   fileName: string,
@@ -1866,6 +1905,10 @@ function analyzeModule(
   visitedFiles: Set<string>
 ): AnalyzedModule {
   const hotspotThreshold = options.hotspotThreshold ?? DEFAULT_HOTSPOT_THRESHOLD;
+  const rules: BigORuleSet = {
+    ...PRESET_DEFAULTS.recommended.rules,
+    ...(options.rules ?? {}),
+  };
   const scriptKind = getScriptKind(fileName);
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -1917,7 +1960,8 @@ function analyzeModule(
         id,
         parentFunctionId,
         sourceFile,
-        importTable
+        importTable,
+        rules
       );
       localAnalyses.push(analysis);
       byId.set(id, analysis);
@@ -2193,6 +2237,8 @@ function analyzeModule(
     }
 
     const isHotspot = !fn.ignored && bottleneckScore >= hotspotThreshold;
+    const triggeredRule = mapCategoryToRule(best);
+    const ruleSeverity = triggeredRule ? rules[triggeredRule] : null;
 
     const result: FunctionComplexity = {
       name: fn.displayName,
@@ -2210,6 +2256,8 @@ function analyzeModule(
       bottleneckScore,
       isHotspot,
       ignored: fn.ignored,
+      triggeredRule,
+      ruleSeverity,
       reasons,
       bottleneckLocation: best ? best.location : null,
       optimizationTip: buildOptimizationTip(best, isHotspot),

@@ -40,8 +40,7 @@ export class BigOCodeLensProvider implements vscode.CodeLensProvider {
       return [];
     }
 
-    const threshold = getHotspotThresholdScore(config);
-    const functions = this.cache.getOrAnalyze(document, threshold);
+    const functions = this.cache.getOrAnalyze(document);
     const lenses: vscode.CodeLens[] = [];
 
     for (const fn of functions) {

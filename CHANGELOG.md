@@ -2,6 +2,16 @@
 
 All notable changes to **Big-O Complexity Analyzer** will be documented in this file.
 
+## [1.2.0] - 2026-11-26
+
+### Added
+- **Configurable Team Rule Sets (`.bigorc.json` & Presets):** Commit a `.bigorc.json` file to share team complexity standards across your repository, or configure `bigoAnalyzer.preset`, `bigoAnalyzer.rules`, and `bigoAnalyzer.ignore` in VS Code settings.
+- **Built-in Presets:** Choose from `relaxed`, `recommended` (default), or `strict` presets, or override individual rules (`noSpreadInLoop`, `noShiftInLoop`, `noHeavyLoopOp`, `noRegexInLoop`, `noNestedArrayLookup`, `noSortInLoop`) to `off`, `hint`, `info`, or `warning`.
+- **Glob Ignore Patterns:** Exclude test, generated, or script files via `"ignore"` patterns in `.bigorc.json` or `bigoAnalyzer.ignore`.
+- **Starter Config Command:** Run **`Big-O: Create Team Config (.bigorc.json)`** (`bigoAnalyzer.initConfig`) to scaffold a `.bigorc.json` in your workspace root with live auto-reload on save.
+
+> 🙏 Special thanks to [Ghislain MITAHI](https://www.linkedin.com/in/ghislain-mitahi/) for suggesting configurable team rule sets!
+
 ## [1.1.3] - 2026-11-25
 
 ### Changed

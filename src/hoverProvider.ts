@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { FunctionComplexity } from './analyzer';
 import { AnalysisCache } from './cache';
-import { getHotspotThresholdScore } from './codeLensProvider';
 
 function formatHoverMarkdown(fn: FunctionComplexity): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
@@ -44,6 +43,12 @@ function formatHoverMarkdown(fn: FunctionComplexity): vscode.MarkdownString {
     md.appendMarkdown(`\n> **Optimization Tip:** ${fn.optimizationTip}\n`);
   }
 
+  if (fn.triggeredRule && fn.ruleSeverity && fn.ruleSeverity !== 'off') {
+    md.appendMarkdown(
+      `\nRule: \`${fn.triggeredRule}\` (\`${fn.ruleSeverity}\`)\n`
+    );
+  }
+
   md.appendMarkdown(
     `\n---\n[📊 Open Complexity Dashboard](command:bigoAnalyzer.openDashboard) · [🔍 Scan Workspace](command:bigoAnalyzer.scanWorkspace)\n`
   );
@@ -69,8 +74,7 @@ export class BigOHoverProvider implements vscode.HoverProvider {
     }
 
     const offset = document.offsetAt(position);
-    const threshold = getHotspotThresholdScore(config);
-    const functions = this.cache.getOrAnalyze(document, threshold);
+    const functions = this.cache.getOrAnalyze(document);
 
     // Prefer the innermost matching function header if nested
     let matched: FunctionComplexity | null = null;
